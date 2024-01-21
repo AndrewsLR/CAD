@@ -29,8 +29,8 @@ class aig{
     aig(string& filename);
     int print();
     int calculaAtraso();
-    int calculafaninout();
-    void create_arv_inversores();
+    int *calculafaninout();
+    void create_arv_inversores(int *fan_out);
     void genVerilog(string verilog_name);
 
 };
@@ -64,12 +64,13 @@ int main()
 
     string s(nomeArquivoEntrada);
     //create_aiger2(s);
-
+	
+	int *saida;
     aig meu_aig(s);
     meu_aig.calculaAtraso();
-    meu_aig.calculafaninout();
+    meu_aig.create_arv_inversores(meu_aig.calculafaninout());
     meu_aig.genVerilog(nomeArquivoSaida);
-    
+
     return 0;
 }
 
@@ -274,15 +275,50 @@ int aig::calculaAtraso(){
     return maxAtraso;
 
 }
-int aig::calculafaninout(){
+int *aig::calculafaninout(){
  	cout<<"Agora vou calcular fanout de cada um dos ands"<<endl;
  	cout<<"Falta implementar!"<<endl;
-	return 0 ;
+	
+	set<int>::iterator itr;
+	int *fan_out = new int[(ni_ + na_)*2 + 2]	();	//fan_out[2] = numero de consumidores positivos de 2, fan_out[3] = numero de consumidore negativos de 2/fan_out[0] e [1] vazios
+	
+	for (int i=ni_+1; i<(ni_+1+na_); i++)
+	{
+		fan_out[filho0_[i]]++;
+		fan_out[filho1_[i]]++;
+	}
+	
+	for (itr = saidas_.begin(); itr != saidas_.end(); itr++)
+	{
+		fan_out[*itr] += 1;
+	}
+	
+	/*for (int i = 2; i< (ni_+na_)*2+2; i++)
+	{
+		cout<<"Porta :"<<i<<"	fanout :"<<fan_out[i]<<endl;
+	}*/
+	
+	return fan_out;
 }
-void aig::create_arv_inversores(){
+void aig::create_arv_inversores(int *fan_out){
  	cout<<"Agora será criada a arvore de buffers inversores e sua estrutura."<<endl;
  	cout<<"Sendo implementada!"<<endl;
-
+	max_fanout = 2;														//sendo forcado para testar
+	int counter = 1;													// ajusta indice do vetor de arvores de acordo com o max_fanout + 1(para guardar profundidade?)
+	int *index = new int[ni_+na_];
+	for (int i = 2; i < (ni_+na_)*2+2; i=i+2)
+	{
+		if(fan_out[i] >max_fanout || fan_out[i+1] > 0)
+		{
+			index[i/2-1] = counter;
+			counter += max_fanout+1;
+		}
+			
+		else
+			index[i/2-1] = 0;
+		
+		//cout <<"index "<<i/2-1<<" = "<<index[i/2-1]<<endl;
+	}
 	return;
 }
 
