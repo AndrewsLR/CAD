@@ -3,6 +3,7 @@
 #include <sstream>
 #include <string>
 #include <set>
+#include <cmath>
 
 using namespace std;
 
@@ -38,38 +39,27 @@ class aig{
 void create_aiger(string &);
 void create_aiger2(string &);
 //int process_aiger_file(string& filename);
+int *min_prof_arv(int fan_max,int ncp,int ncn);
 
 
-int main()
+int main(int argc, char *argv[])
 {
-    char escolha;
-    std::string tipoPrimitivas;
-    std::string nomeArquivoEntrada;
-    std::string nomeArquivoSaida;
-
-    std::cout << "Digite nome do arquivo de entrada, nome do arquivo de saida e 1 Sem biblioteca ou 2 SkyWater, separados por espacos: ";
-    std::cin >> nomeArquivoEntrada >> nomeArquivoSaida >> escolha;
-
-    // Validar a entrada do usuário
-    while (escolha != '1' && escolha != '2') {
-        std::cout << "Opção inválida. Escolha novamente (1 ou 2): ";
-        std::cin >> escolha;
+    if(argc < 5){
+    cout << "Abrir com [nomedoarquivo.aag] [nodemoarquivodesaida.vh] [fanout] [0-sem biblioteca 1-skywater]"<< endl;
+    return 0;
     }
-
-    tipoPrimitivas = (escolha == '1') ? "Sem biblioteca" : "SkyWater";
-
-    std::cout << "Você escolheu: " << tipoPrimitivas << std::endl;
-    std::cout << "Arquivo de entrada: " << nomeArquivoEntrada << std::endl;
-    std::cout << "Arquivo de saída: " << nomeArquivoSaida << std::endl;
-
-    string s(nomeArquivoEntrada);
-    //create_aiger2(s);
+    
+    string name_aig = argv[1];
+    string name_verilog = argv[2];
+	int fan_max = atoi(argv[3]);
+	int bib = atoi(argv[4]);
+	
 	
 	int *saida;
-    aig meu_aig(s);
+    aig meu_aig(name_aig);
     meu_aig.calculaAtraso();
     meu_aig.create_arv_inversores(meu_aig.calculafaninout());
-    meu_aig.genVerilog(nomeArquivoSaida);
+    meu_aig.genVerilog(name_verilog);
 
     return 0;
 }
@@ -304,20 +294,24 @@ void aig::create_arv_inversores(int *fan_out){
  	cout<<"Agora será criada a arvore de buffers inversores e sua estrutura."<<endl;
  	cout<<"Sendo implementada!"<<endl;
 	max_fanout = 2;														//sendo forcado para testar
+	int *num_niv;													// forcando uma profundidade de arvore para testar
 	int counter = 1;													// ajusta indice do vetor de arvores de acordo com o max_fanout + 1(para guardar profundidade?)
 	int *index = new int[ni_+na_];
+	
 	for (int i = 2; i < (ni_+na_)*2+2; i=i+2)
 	{
-		if(fan_out[i] >max_fanout || fan_out[i+1] > 0)
+		
+		if(fan_out[i] >max_fanout || fan_out[i+1] > 0)						//se precisar de arvore, calcula altura minima,adiciona ao vetor index onde comeca a arvore daquela porta 
 		{
+			num_niv = min_prof_arv(max_fanout,fan_out[i],fan_out[i+1]);
 			index[i/2-1] = counter;
-			counter += max_fanout+1;
+			counter += max_fanout*max(num_niv[0],num_niv[1]) +2;
 		}
 			
 		else
 			index[i/2-1] = 0;
 		
-		//cout <<"index "<<i/2-1<<" = "<<index[i/2-1]<<endl;
+		cout <<"entrada index "<<i/2-1<<" porta "<< i <<" posicao no vetor arvore "<<index[i/2-1]<<endl;
 	}
 	return;
 }
@@ -407,4 +401,40 @@ void aig:: genVerilog(string verilog_name){
 
     // Close the Verilog file
     verilogFile.close();
+}
+
+int *min_prof_arv(int fan_max,int ncp,int ncn)
+{
+	int pronto = 0;
+	int i = 0;	//contador
+	int ip = i;	//index candidato para positivos
+	int in = i+1;	//index candidato pra negativo
+	int vagas = int(pow(fan_max,i+1)); //numero de vagas por nivel
+	
+	if((vagas >= ncp) && (vagas - ncp)*fan_max >= ncn)
+		pronto = 1;
+	
+	while(pronto == 0)
+	{
+		i++;
+		vagas = int(pow(fan_max,i+1));
+		if(!(i%2))
+		{
+			ip = i;
+			in=i+1;
+			if((vagas >= ncp) && (vagas - ncp)*fan_max >= ncn)
+				pronto = 1;
+		}
+		else
+		{
+			in=i;
+			ip=i+1;
+			if((vagas >= ncn) && (vagas - ncn)*fan_max >= ncp)
+				pronto = 1;
+		}
+	}
+	int *index = new int[2];
+	index[0] = ip;
+	index[1] = in;
+	return index;
 }
