@@ -4,6 +4,7 @@
 #include <string>
 #include <set>
 #include <cmath>
+#include <vector>
 
 using namespace std;
 
@@ -30,8 +31,8 @@ class aig{
     aig(string& filename);
     int print();
     int calculaAtraso();
-    int *calculafaninout();
-    void create_arv_inversores(int *fan_out);
+    int *calculafaninout(int porta, set<int> &conp, set<int> &conn);
+    void create_arv_inversores(int max_fanout);
     void genVerilog(string verilog_name);
 
 };
@@ -40,7 +41,7 @@ void create_aiger(string &);
 void create_aiger2(string &);
 //int process_aiger_file(string& filename);
 int *min_prof_arv(int fan_max,int ncp,int ncn);
-
+int insere_arvore(int max_fanout,int index,int porta,int *nivs,set<int> &conp, set<int> &conn,vector<int> &arvore);
 
 int main(int argc, char *argv[])
 {
@@ -58,7 +59,7 @@ int main(int argc, char *argv[])
 	int *saida;
     aig meu_aig(name_aig);
     meu_aig.calculaAtraso();
-    meu_aig.create_arv_inversores(meu_aig.calculafaninout());
+    meu_aig.create_arv_inversores(fan_max);
     meu_aig.genVerilog(name_verilog);
 
     return 0;
@@ -265,54 +266,92 @@ int aig::calculaAtraso(){
     return maxAtraso;
 
 }
-int *aig::calculafaninout(){
- 	cout<<"Agora vou calcular fanout de cada um dos ands"<<endl;
- 	cout<<"Falta implementar!"<<endl;
-	
+int *aig::calculafaninout(int porta, set<int> &conp, set<int> &conn){		//recebe uma porta e dois set conp(positivos) e conn(negativos), retorna fan_out[0] com consumidores positivos e fan_out[1] com negativos.
+																			//adiciona consumidores ao set
 	set<int>::iterator itr;
-	int *fan_out = new int[(ni_ + na_)*2 + 2]	();	//fan_out[2] = numero de consumidores positivos de 2, fan_out[3] = numero de consumidore negativos de 2/fan_out[0] e [1] vazios
+	int *fan_out = new int[2] ();
 	
 	for (int i=ni_+1; i<(ni_+1+na_); i++)
 	{
-		fan_out[filho0_[i]]++;
-		fan_out[filho1_[i]]++;
+		if(filho0_[i] == porta)
+		{
+			conp.insert(i*2);
+			fan_out[0] ++;
+			
+		}
+		else
+			if(filho0_[i]-1 == porta)
+			{
+				conn.insert(i*2);
+				fan_out[1] ++;
+			}
+		if(filho1_[i] == porta)
+		{
+			conp.insert(i*2);
+			fan_out[0] ++;
+		}
+		else
+			if(filho1_[i]-1 == porta)
+				{
+					conn.insert(i*2);
+					fan_out[1] ++;
+				}
+		//cout << "contador "<<i<<" porta sendo vista "<<i*2<< " portas filhas "<<filho0_[i]<<" | "<<filho1_[i]<<endl;
 	}
 	
 	for (itr = saidas_.begin(); itr != saidas_.end(); itr++)
 	{
-		fan_out[*itr] += 1;
+		if(*itr == porta)
+			fan_out[0] += 1;
+		if(*itr-1 == porta)
+			fan_out[1] += 1;
 	}
 	
-	/*for (int i = 2; i< (ni_+na_)*2+2; i++)
-	{
-		cout<<"Porta :"<<i<<"	fanout :"<<fan_out[i]<<endl;
-	}*/
+	//cout<<" Porta "<<porta <<" consumidores positivos "<<fan_out[0]<<" consumidores negativos " <<fan_out[1]<<endl;
 	
 	return fan_out;
 }
-void aig::create_arv_inversores(int *fan_out){
+void aig::create_arv_inversores(int max_fanout){
  	cout<<"Agora será criada a arvore de buffers inversores e sua estrutura."<<endl;
  	cout<<"Sendo implementada!"<<endl;
-	max_fanout = 2;														//sendo forcado para testar
-	int *num_niv;													// forcando uma profundidade de arvore para testar
-	int counter = 1;													// ajusta indice do vetor de arvores de acordo com o max_fanout + 1(para guardar profundidade?)
-	int *index = new int[ni_+na_];
+	int *num_niv;													
+	int counter = 1;												// ajusta indice do vetor de arvores de acordo com o max_fanout e profundidade da arvore
+	int *index = new int[ni_+na_] ();								// onde fica o index
+	int *fan_out;													// vetor onde [0] contentem consumidores positivos e [1] negativos
+	set<int> conp;													// set com consumidores positivos
+	set<int> conn;													//set com consumidores negativos
+	vector<int> arvore(100);
 	
-	for (int i = 2; i < (ni_+na_)*2+2; i=i+2)
+	for (int i=2; i<=(ni_+na_)*2; i=i+2)
 	{
+		fan_out = calculafaninout(i,conp,conn);										//calcula fanout da porta i e retornar resultado pra fan_out[0] e fan_out[1]
 		
-		if(fan_out[i] >max_fanout || fan_out[i+1] > 0)						//se precisar de arvore, calcula altura minima,adiciona ao vetor index onde comeca a arvore daquela porta 
+		if(fan_out[0] > max_fanout || fan_out[1] > 0)								//se precisar de arvore, calcula altura minima,adiciona ao vetor index onde comeca a arvore daquela porta 
 		{
-			num_niv = min_prof_arv(max_fanout,fan_out[i],fan_out[i+1]);
+			num_niv = min_prof_arv(max_fanout,fan_out[0],fan_out[1]);
 			index[i/2-1] = counter;
-			counter += max_fanout*max(num_niv[0],num_niv[1]) +2;
+			counter = insere_arvore(max_fanout ,counter ,i ,num_niv ,conp ,conn ,arvore);
 		}
+			cout<<"portas consumidoras positivas "<<i<<endl;
+			for (set<int>::iterator itr = conp.begin(); itr != conp.end(); itr++)
+				cout<<*itr<<endl;
+			cout<<"portas consumidoras negativas "<<i<<endl;
+			for (set<int>::iterator itr = conn.begin(); itr != conn.end(); itr++)
+				cout<<*itr<<endl;
 			
-		else
-			index[i/2-1] = 0;
-		
-		cout <<"entrada index "<<i/2-1<<" porta "<< i <<" posicao no vetor arvore "<<index[i/2-1]<<endl;
+			conp.clear();
+			conn.clear();
 	}
+
+		//fan_out = calculafaninout(12,conp,conn);
+		//num_niv = min_prof_arv(max_fanout,fan_out[0],fan_out[1]);
+		//insere_arvore(max_fanout ,counter ,12 ,num_niv ,conp ,conn ,arvore);
+		for (int value : arvore) {
+        std::cout << value <<endl;
+    }
+	
+	//for(int i =0;i<(ni_+na_);i++)
+	//	cout <<"entrada index "<<i<<" porta "<< (i+1)*2 <<" posicao no vetor arvore "<<index[i]<<endl;
 	return;
 }
 
@@ -403,7 +442,7 @@ void aig:: genVerilog(string verilog_name){
     verilogFile.close();
 }
 
-int *min_prof_arv(int fan_max,int ncp,int ncn)
+int *min_prof_arv(int fan_max,int ncp,int ncn)	//algoritmo do paper do jody
 {
 	int pronto = 0;
 	int i = 0;	//contador
@@ -437,4 +476,93 @@ int *min_prof_arv(int fan_max,int ncp,int ncn)
 	index[0] = ip;
 	index[1] = in;
 	return index;
+}
+
+int insere_arvore(int max_fanout,int index,int porta, int *nivs, set<int> &conp, set<int> &conn,vector<int> &arvore)		//utiliza niveis para pre alocar inversores, em seguida insere portas
+{																															//nao organiza multiplos inversores por nivel
+	int posi = index;												//	posicao onde sera colocado os identificadores
+	cout<<"INDEX PORTA "<<porta<<" É "<<index;
+	arvore[posi] = porta;
+	posi += (max_fanout+1)*2;
+	cout<<" NUMERO INDICE POSITIVO "<<nivs[0]<<" NIVEIS NEGATIVOS "<<nivs[1]<<endl; 
+	int index_p = 1;
+	int index_n= 1;
+	for (int i = 1; i <= nivs[0]; i++)							//enquanto existirem niveis positivos, preenche o identificadores
+	{
+		arvore[posi] = porta;										//coloca identificador
+		arvore[posi-1] = porta;										//coloca inversor no nivel anterior
+		posi += (max_fanout+1)*2;
+		
+	}
+	index_p = posi - (max_fanout+1);
+	posi = index + (max_fanout+1);
+	
+	for (int i = 0; i <= nivs[1]; i ++)							//enquanto existirem niveis negativos, preenche o identificadores
+	{
+		arvore[posi] = porta+1;										//coloca identificador
+		arvore[posi-1] = porta+1;									//coloca inversor no nivel anterior
+		posi += (max_fanout+1)*2;
+		
+	}
+	
+	index_n = posi - (max_fanout+1);
+	int nivel = index;
+	int cont = 1;
+	for (set<int>::iterator itr = conp.begin(); itr != conp.end(); itr++)	//insere consumidores positivos
+	{
+		
+		if(cont == max_fanout)
+		{
+			if(arvore[nivel+cont] != 0)
+			{
+				nivel += (max_fanout+1)*2;
+				cont = 1;
+				arvore[nivel+cont] = *itr;
+			}
+			else
+			{
+				arvore[nivel+cont] = *itr;
+				nivel += (max_fanout+1)*2;
+				cont = 1;
+				
+			}
+			
+		}
+		else
+		{
+			arvore[nivel+cont] = *itr;
+		}
+		cont ++;
+	}
+	
+	nivel = index + (max_fanout+1);
+	cont = 1;
+		for (set<int>::iterator itr = conn.begin(); itr != conn.end(); itr++)	//insere consumidores positivos
+	{
+		
+		if(cont == max_fanout)
+		{
+			if(arvore[nivel+cont] != 0)
+			{
+				nivel += (max_fanout+1)*2;
+				cont = 1;
+				arvore[nivel+cont] = *itr;
+			}
+			else
+			{
+				arvore[nivel+cont] = *itr;
+				nivel += (max_fanout+1)*2;
+				cont = 1;
+				
+			}
+			
+		}
+		else
+		{
+			arvore[nivel+cont] = *itr;
+		}
+		cont ++;
+	}
+	
+	return max(index_p,index_n);
 }
