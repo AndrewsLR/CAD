@@ -41,7 +41,8 @@ void create_aiger(string &);
 void create_aiger2(string &);
 //int process_aiger_file(string& filename);
 int *min_prof_arv(int fan_max,int ncp,int ncn);
-int insere_arvore(int max_fanout,int index,int porta,int *nivs,set<int> &conp, set<int> &conn,vector<int> &arvore);
+int insere_arvore(int max_fanout,int index,int porta,int *inv_niv,set<int> &conp, set<int> &conn,vector<int> &arvore,int num_niv);
+int *inversoresPorNivel(int maxf, int ncp, int ncn, int numNiveis);
 
 int main(int argc, char *argv[])
 {
@@ -320,36 +321,63 @@ void aig::create_arv_inversores(int max_fanout){
 	int *fan_out;													// vetor onde [0] contentem consumidores positivos e [1] negativos
 	set<int> conp;													// set com consumidores positivos
 	set<int> conn;													//set com consumidores negativos
-	vector<int> arvore(100);
+	vector<int> arvore;
+	int *inv_niv;													//vetor onde ficam numero de inversorem em cada nivel
 	
 	for (int i=2; i<=(ni_+na_)*2; i=i+2)
 	{
 		fan_out = calculafaninout(i,conp,conn);										//calcula fanout da porta i e retornar resultado pra fan_out[0] e fan_out[1]
-		
 		if(fan_out[0] > max_fanout || fan_out[1] > 0)								//se precisar de arvore, calcula altura minima,adiciona ao vetor index onde comeca a arvore daquela porta 
 		{
-			num_niv = min_prof_arv(max_fanout,fan_out[0],fan_out[1]);
 			index[i/2-1] = counter;
-			counter = insere_arvore(max_fanout ,counter ,i ,num_niv ,conp ,conn ,arvore);
+			num_niv = min_prof_arv(max_fanout,fan_out[0],fan_out[1]);
+			int niv_arv = max(num_niv[0],num_niv[1]);
+			inv_niv = inversoresPorNivel(max_fanout, fan_out[0], fan_out[1], num_niv[0]);
+			arvore.resize(arvore.size() + (niv_arv*(max_fanout+1)));
+			for(int n = 0; n<= niv_arv; n++)
+			{
+				cout<<"INV NO NIVEL "<<n+1<<" "<<inv_niv[n]<<endl;
+				arvore.resize(arvore.size() + (inv_niv[n]*(max_fanout+1)));
+			}
+			cout<<"TAMANHO DA ARVORE "<<arvore.size()<<endl;	//possivel tamanho errado
+			counter = insere_arvore(max_fanout ,counter ,i ,inv_niv ,conp ,conn ,arvore,niv_arv+1);
+			
 		}
-			cout<<"portas consumidoras positivas "<<i<<endl;
+			/*cout<<"portas consumidoras positivas "<<i<<endl;
 			for (set<int>::iterator itr = conp.begin(); itr != conp.end(); itr++)
 				cout<<*itr<<endl;
 			cout<<"portas consumidoras negativas "<<i<<endl;
 			for (set<int>::iterator itr = conn.begin(); itr != conn.end(); itr++)
-				cout<<*itr<<endl;
+				cout<<*itr<<endl;*/
 			
 			conp.clear();
 			conn.clear();
 	}
-
-		//fan_out = calculafaninout(12,conp,conn);
-		//num_niv = min_prof_arv(max_fanout,fan_out[0],fan_out[1]);
-		//insere_arvore(max_fanout ,counter ,12 ,num_niv ,conp ,conn ,arvore);
-		for (int value : arvore) {
-        std::cout << value <<endl;
-    }
-	
+		/*
+		fan_out = calculafaninout(12,conp,conn);
+		num_niv = min_prof_arv(max_fanout,fan_out[0],fan_out[1]);
+		int niv_arv = max(num_niv[0],num_niv[1]);
+		cout<<"TAMANHO DA ARVORE "<<niv_arv<<endl;
+		cout<<"NIVEL Negativo "<<num_niv[1]<<" POSITIVO "<< num_niv[0]<<endl;
+		inv_niv = inversoresPorNivel(max_fanout, fan_out[0], fan_out[1], niv_arv);
+		arvore.resize(arvore.size() + (niv_arv*(max_fanout+1)));
+		for(int n = 0; n<= niv_arv; n++)
+		{
+			cout<<"INV NO NIVEL "<<n+1<<" "<<inv_niv[n]<<endl;
+			arvore.resize(arvore.size() + (inv_niv[n]*(max_fanout+1)));
+		}
+		cout<<"TAMANHO DA ARVORE "<<arvore.size()<<endl;	//possivel tamanho errado
+		insere_arvore(max_fanout ,counter ,12 ,inv_niv ,conp ,conn ,arvore,niv_arv+1);
+		*/
+		for (int value : arvore) 
+		{
+			std::cout << value <<endl;
+		}
+		cout<<"INDEX"<<endl;
+		for (int n = 0; n < ni_+na_;n++)
+		{
+			cout << index[n] <<endl;
+		}
 	//for(int i =0;i<(ni_+na_);i++)
 	//	cout <<"entrada index "<<i<<" porta "<< (i+1)*2 <<" posicao no vetor arvore "<<index[i]<<endl;
 	return;
@@ -478,91 +506,118 @@ int *min_prof_arv(int fan_max,int ncp,int ncn)	//algoritmo do paper do jody
 	return index;
 }
 
-int insere_arvore(int max_fanout,int index,int porta, int *nivs, set<int> &conp, set<int> &conn,vector<int> &arvore)		//utiliza niveis para pre alocar inversores, em seguida insere portas
+int insere_arvore(int max_fanout,int index,int porta, int *inv_niv, set<int> &conp, set<int> &conn,vector<int> &arvore, int num_niv)		//utiliza niveis para pre alocar inversores, em seguida insere portas
 {																															//nao organiza multiplos inversores por nivel
+
+//nivel * (fan_max - 1) < numero portas
+// insere inv no ultimo slot do ultimo nivel
 	int posi = index;												//	posicao onde sera colocado os identificadores
-	cout<<"INDEX PORTA "<<porta<<" É "<<index;
-	arvore[posi] = porta;
-	posi += (max_fanout+1)*2;
-	cout<<" NUMERO INDICE POSITIVO "<<nivs[0]<<" NIVEIS NEGATIVOS "<<nivs[1]<<endl; 
-	int index_p = 1;
-	int index_n= 1;
-	for (int i = 1; i <= nivs[0]; i++)							//enquanto existirem niveis positivos, preenche o identificadores
-	{
-		arvore[posi] = porta;										//coloca identificador
-		arvore[posi-1] = porta;										//coloca inversor no nivel anterior
-		posi += (max_fanout+1)*2;
-		
-	}
-	index_p = posi - (max_fanout+1);
-	posi = index + (max_fanout+1);
+	int reserva = index + max_fanout+1;								// primeria posicao disponivel para ser reservada
 	
-	for (int i = 0; i <= nivs[1]; i ++)							//enquanto existirem niveis negativos, preenche o identificadores
-	{
-		arvore[posi] = porta+1;										//coloca identificador
-		arvore[posi-1] = porta+1;									//coloca inversor no nivel anterior
-		posi += (max_fanout+1)*2;
-		
-	}
-	
-	index_n = posi - (max_fanout+1);
-	int nivel = index;
-	int cont = 1;
-	for (set<int>::iterator itr = conp.begin(); itr != conp.end(); itr++)	//insere consumidores positivos
-	{
-		
-		if(cont == max_fanout)
+	for(int i = 0; i < num_niv; i++)								//Para cada nivel, insere inversores e reserva slot para esses
+	{																	
+		if(i%2 == 0)
+			arvore[posi] = porta;
+		else
+			arvore[posi] = porta+1;
+		int mov = 1;
+		for(int j = 1; j <= inv_niv[i]; j++)
 		{
-			if(arvore[nivel+cont] != 0)
+			if(arvore[posi+mov] != 0)
+			{	
+				mov++;
+			}
+			if(i%2 == 0)
 			{
-				nivel += (max_fanout+1)*2;
-				cont = 1;
-				arvore[nivel+cont] = *itr;
+				arvore[posi+mov] = porta+1;
+				arvore[reserva] = porta+1;
 			}
 			else
 			{
-				arvore[nivel+cont] = *itr;
-				nivel += (max_fanout+1)*2;
-				cont = 1;
-				
+				arvore[posi+mov] = porta;
+				arvore[reserva] = porta;
 			}
-			
+			reserva += max_fanout+1;
+			mov++;
 		}
-		else
-		{
-			arvore[nivel+cont] = *itr;
-		}
-		cont ++;
+		posi = reserva - (inv_niv[i]*(max_fanout+1));
 	}
-	
-	nivel = index + (max_fanout+1);
-	cont = 1;
-		for (set<int>::iterator itr = conn.begin(); itr != conn.end(); itr++)	//insere consumidores positivos
-	{
+	delete[] inv_niv;
 		
-		if(cont == max_fanout)
-		{
-			if(arvore[nivel+cont] != 0)
-			{
-				nivel += (max_fanout+1)*2;
-				cont = 1;
-				arvore[nivel+cont] = *itr;
-			}
-			else
-			{
-				arvore[nivel+cont] = *itr;
-				nivel += (max_fanout+1)*2;
-				cont = 1;
-				
-			}
-			
-		}
-		else
-		{
-			arvore[nivel+cont] = *itr;
-		}
-		cont ++;
+	set<int>::iterator itrp = conp.begin();										//iterador para lista de consumidores positivos
+	set<int>::iterator itrn = conn.begin();										//iterador pra lista de consumidores negativos
+	int sinal = 1;															//sinal da posicao atual (1 e -1)
+	int mov = 0;															//marca quantas posicoes foram andadas (para fazer a troca de sinal)
+	
+	if(itrp != conp.end() || itrn != conn.end())
+	{
+		posi = index;															//posicao atual da arvore
+	}
+	else
+	{
+		posi = reserva;
 	}
 	
-	return max(index_p,index_n);
+	while(itrp != conp.end() || itrn != conn.end())								//enquanto houverem consumidores para serem inseridos
+	{																			//atualiza sinal sempre que ve um rotulo
+		if(mov == max_fanout+1)													//de acordo com sinal, verificar se entrada esta vazia, insere consumidor (se existir), remove consumidor do set
+		{																		
+			if(arvore[posi]%2 == 0)
+				sinal = 1;
+			else
+				sinal = -1;
+			mov = 0;
+		}
+		if(sinal == 1 && arvore[posi] == 0 && itrp != conp.end())
+		{
+			arvore[posi] = *itrp;
+			conp.erase(itrp);
+			itrp = conp.begin();
+		}
+		
+		if(sinal == -1 && arvore[posi] == 0 && itrn != conn.end())
+		{
+			arvore[posi] = *itrn;
+			conn.erase(itrn);
+			itrn = conn.begin();
+		}
+		posi++;
+		mov++;
+		
+	}		
+
+
+	
+	return posi;
+}
+
+int *inversoresPorNivel(int maxf, int ncp, int ncn, int numNiveis)	//recebe fanout,consumidores, index de nivel da arvore(index = 0 -> 1 nivel)
+{
+  int nConsumidores[numNiveis+1];
+  int *nInversores= new int[numNiveis+1];
+  double x;
+  //resolve numNiveis+1
+  if (numNiveis%2 == 0)
+    {nConsumidores[numNiveis+1]=ncn;
+      nInversores[numNiveis+1]=0;
+      nConsumidores[numNiveis]=ncp;
+      nInversores[numNiveis]=(int)ceil((double)ncn/(double)maxf);
+    }
+  else
+    {nConsumidores[numNiveis+1]=ncp;
+      nInversores[numNiveis+1]=0;
+      nConsumidores[numNiveis]=ncn;
+      nInversores[numNiveis]=(int)ceil((double)ncp/(double)maxf);}
+   
+      for(int currentNivel=numNiveis-1; currentNivel>=0; currentNivel--)
+	{
+	  if (currentNivel>=0)
+	    {
+	      nConsumidores[currentNivel]=0;
+	      x=nConsumidores[currentNivel+1]+nInversores[currentNivel+1];
+	      nInversores[currentNivel]=(int)ceil((double)x/(double)maxf);
+	    }
+	}
+	
+	return nInversores;
 }
